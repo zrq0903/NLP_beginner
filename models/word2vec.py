@@ -57,11 +57,16 @@ if __name__ == '__main__':
         l.backward()
         optimizer.step()
 
-        __,pred = torch.max(output.data, 1)
-        acc = (pred==label_batch).sum().item()/label_batch.shape[0]
+        #__,pred = torch.max(output.data, 1)
+        __,pred = torch.topk(output.data, k=2)
+        acc = ((pred == label_batch.unsqueeze(1)).any(dim=1)).sum().item()/label_batch.shape[0]   #In PyTorch, the .any() function is a method that checks if any elements along a specified dimension of a tensor evaluate to True. It can be useful for determining whether at least one condition in a tensor holds true.
         if((epoch+1)%100 ==0):
             print("epoch {}, loss = {}, acc {}".format(epoch+1,l.item(),acc))
-    predict =  model(input_batch).data.max(1,keepdim = True)[1]
-    print([label_to_word[pair[0]] for pair in pairs], '->', [label_to_word[n.item()] for n in predict.squeeze()])
-    print([label_to_word[pair[0]] for pair in pairs], '->', [label_to_word[pair[1]] for pair in pairs])
+    #print(model(input_batch).data.topk(k=2))
+    #predict =  model(input_batch).data.max(1,keepdim = True)[1]
+    predict = model(input_batch).data.topk(k=2)[1]
+    #print([label_to_word[pair[0]] for pair in pairs], '->', [label_to_word[n.item()] for n in predict.squeeze()])
+    print([label_to_word[pair[0]] for pair in pairs[::2]], '->', [label_to_word[m.item()] for n in predict[::2].squeeze() for m in n])
+    #print([label_to_word[pair[0]] for pair in pairs], '->', [label_to_word[pair[1]] for pair in pairs])
+
 
