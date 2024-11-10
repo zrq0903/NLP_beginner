@@ -26,7 +26,7 @@ for w,n in word_count.items():
     if n>=3:
         included.append(w)
 #print(len(excluded))
-window_size = 5
+window_size = 2
 word_to_label = {w:l for l, w in enumerate(included)}
 label_to_word = {l:w for l, w in enumerate(included)}
 #def get_pairs(corpus):
@@ -51,7 +51,7 @@ def unigram_distribution(word_count,included):
     return vocab, weight
 vocab, uni_weights = unigram_distribution(word_count, included)
 
-k = 10
+k = 3
 def negative_sampling(pos,uni_weights,k):
     batch_size = pos.shape[0]
     neg_samples = []
@@ -59,7 +59,7 @@ def negative_sampling(pos,uni_weights,k):
         #pos_index = pos[i].data.tolist()[0]
         pos_index = pos[i].data.tolist()
         neg_index = []
-        while len(neg_samples)<k:
+        while len(neg_index)<k:
             neg = random.choices(vocab,weights=uni_weights,k=1)[0]
             if word_to_label[neg] != pos_index:
                 neg_index.append(word_to_label[neg])
@@ -91,7 +91,7 @@ def get_input_batch(pairs):
 
 input_batch = get_input_batch(pairs)
 epoch = 100
-embedding_size = 30
+embedding_size = 4
 model = skipgram_negsampling(len(vocab),embedding_size)
 optimizer = torch.optim.Adam(model.parameters(),lr=0.001)
 for i in range(epoch):
