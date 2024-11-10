@@ -9,6 +9,8 @@ from docutils.nodes import label
 from nltk.corpus import gutenberg
 from collections import Counter
 
+from torch.nn.functional import embedding
+
 #print(gutenberg.sents('melville-moby_dick.txt')[:10])
 '''
 preprocessing
@@ -54,10 +56,11 @@ def negative_sampling(pos,uni_weights,k):
     batch_size = pos.shape[0]
     neg_samples = []
     for i in range(batch_size):
-        pos_index = pos[i].data.tolist()[0]
+        #pos_index = pos[i].data.tolist()[0]
+        pos_index = pos[i].data.tolist()
         neg_index = []
         while len(neg_samples)<k:
-            neg = random.choices(vocab,weights=uni_weights,k=1)
+            neg = random.choices(vocab,weights=uni_weights,k=1)[0]
             if word_to_label[neg] != pos_index:
                 neg_index.append(word_to_label[neg])
         neg_samples.append(torch.LongTensor(neg_index).view(1,-1)) #(1,k)
@@ -70,13 +73,34 @@ class skipgram_negsampling(nn.Module):
         self.embedding_o = nn.Embedding(vocab_size,embed_size)
 
     def forward(self,target,center,neg):
-        center_embedding = self.embedding_i(target)
-        target_embedding = self.embedding_o(center) #(batch, emb)
-        neg_embedding = self.embedding_o(neg)  #(batch,emb,k)
+        # nn.Embedding added in the last dim
+        center_embedding = self.embedding_i(target) #(batch,emb)
+        target_embedding = self.embedding_o(center) #(batch,emb)
+        neg_embedding = self.embedding_o(neg)  #(batch,k,emb)
         positive_score = torch.sum(center_embedding*target_embedding,dim=1)
-        negative_score = torch.bmm(center_embedding.unsqueeze(2),neg_embedding)
-
+        negative_score = torch.bmm(neg_embedding,center_embedding.unsqueeze(2))
+        #center -> (batch, emb, 1) -> neg(batch, k, emb) bmm (batch, emb, 1)-> (batch, k, 1)
         loss = - F.logsigmoid(positive_score) - F.logsigmoid(-negative_score)
         return torch.mean(loss)
 
 # to be continue
+def get_input_batch(pairs):
+    center_batch = torch.LongTensor([word_to_label[pair[0]] for pair in pairs]).view(1,-1)
+    context_batch = torch.LongTensor([word_to_label[pair[1]] for pair in pairs]).view(1,-1)
+    return list(zip(center_batch,context_batch))
+
+input_batch = get_input_batch(pairs)
+epoch = 100
+embedding_size = 30
+model = skipgram_negsampling(len(vocab),embedding_size)
+optimizer = torch.optim.Adam(model.parameters(),lr=0.001)
+for i in range(epoch):
+    optimizer.zero_grad()
+    center, target = zip(*input_batch)
+    center = torch.cat(center)
+    target = torch.cat(target)
+    negative = negative_sampling(target,uni_weights,k)
+    loss = model(center,target,negative)
+    loss.backward()
+    optimizer.step()
+
