@@ -15,7 +15,6 @@ from torch.nn.functional import embedding
 '''
 preprocessing
 '''
-window_size = 5
 corpus = list(gutenberg.sents('melville-moby_dick.txt'))[:500]
 corpus = [[word.lower() for word in sent] for sent in corpus]
 flatten_corpus = [word for sent in corpus for word in sent]
@@ -23,7 +22,7 @@ flatten_corpus = [word for sent in corpus for word in sent]
 included = []
 word_count = Counter(flatten_corpus)
 for w,n in word_count.items():
-    if n>=3:
+    if n>=8:
         included.append(w)
 #print(len(excluded))
 window_size = 2
@@ -74,14 +73,17 @@ class skipgram_negsampling(nn.Module):
 
     def forward(self,target,center,neg):
         # nn.Embedding added in the last dim
-        center_embedding = self.embedding_i(target) #(batch,emb)
-        target_embedding = self.embedding_o(center) #(batch,emb)
+        center_embedding = self.embedding_i(center) #(batch,emb)
+        target_embedding = self.embedding_o(target) #(batch,emb)
         neg_embedding = self.embedding_o(neg)  #(batch,k,emb)
         positive_score = torch.sum(center_embedding*target_embedding,dim=1)
         negative_score = torch.bmm(neg_embedding,center_embedding.unsqueeze(2))
         #center -> (batch, emb, 1) -> neg(batch, k, emb) bmm (batch, emb, 1)-> (batch, k, 1)
         loss = - F.logsigmoid(positive_score) - F.logsigmoid(-negative_score)
         return torch.mean(loss)
+
+    def predict(self,center):
+        return self.embedding_i(center)
 
 # to be continue
 def get_input_batch(pairs):
@@ -90,10 +92,11 @@ def get_input_batch(pairs):
     return list(zip(center_batch,context_batch))
 
 input_batch = get_input_batch(pairs)
-epoch = 100
+epoch = 500
 embedding_size = 4
 model = skipgram_negsampling(len(vocab),embedding_size)
 optimizer = torch.optim.Adam(model.parameters(),lr=0.001)
+#loss_val = []
 for i in range(epoch):
     optimizer.zero_grad()
     center, target = zip(*input_batch)
@@ -103,4 +106,15 @@ for i in range(epoch):
     loss = model(center,target,negative)
     loss.backward()
     optimizer.step()
+    if ((i + 1) % 10 == 0):
+        print("epoch {}, loss = {}".format(i + 1, loss.item()))
 
+def pred(center, vocab):
+    center_embedding = model.predict(torch.LongTensor([word_to_label[center]]))
+    simlilarities = []
+    for i in range(len(vocab)):
+        word_embedding = model.predict(torch.LongTensor([word_to_label[vocab[i]]]))
+        cos_sim = F.cosine_similarity(center_embedding,word_embedding).data.tolist()[0]
+        simlilarities.append([vocab[i],cos_sim])
+    return sorted(simlilarities,key=lambda x:x[1],reverse=True)[:10]
+print(pred('leviathan',vocab))
